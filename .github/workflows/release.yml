@@ -56,7 +56,7 @@ jobs:
           git config --global user.email "github-actions@github.com"
           git config --global user.name "GitHub Actions"
           git checkout main
-          git pull origin main  # Убедимся, что main актуален
+          git pull origin main
           git checkout -b releases/${VERSION}
           git push origin releases/${VERSION}
 
@@ -74,19 +74,28 @@ jobs:
           docker push $REGISTRY:${{ github.run_number }}
           docker push $REGISTRY:${{ github.run_number }}_latest
 
+      - name: Get previous tag
+        id: get_previous_tag
+        run: |
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 --match "v*" 2>/dev/null || echo "")
+          echo "previous_tag=${PREVIOUS_TAG}" >> $GITHUB_OUTPUT
+
+      - name: Create git tag first
+        env:
+          VERSION: ${{ github.run_number }}
+        run: |
+          git tag v${VERSION}
+          git push origin v${VERSION}
+
       - name: Generate changelog from commits
         id: changelog
         env:
           VERSION: ${{ github.run_number }}
         run: |
-          # Находим последний тег (релизный или фиксрелизный)
-          PREVIOUS_TAG=$(git describe --tags --abbrev=0 --match "v*" 2>/dev/null || echo "")
-          if [ -z "$PREVIOUS_TAG" ]; then
-            # Если тегов нет, берём все коммиты из main
+          if [ -z "${{ steps.get_previous_tag.outputs.previous_tag }}" ]; then
             COMMITS=$(git log main --pretty=format:"- %h: %s" --no-merges || echo "- Первый релиз")
           else
-            # Берём коммиты из main между последним тегом и последним коммитом
-            COMMITS=$(git log $PREVIOUS_TAG..HEAD --pretty=format:"- %h: %s" --no-merges || echo "- Нет новых коммитов")
+            COMMITS=$(git log ${{ steps.get_previous_tag.outputs.previous_tag }}..v${VERSION} --pretty=format:"- %h: %s" --no-merges || echo "- Нет новых коммитов")
           fi
           echo "COMMITS<<EOF" >> $GITHUB_ENV
           echo "$COMMITS" >> $GITHUB_ENV
@@ -108,15 +117,6 @@ jobs:
           git add CHANGELOG.md
           git commit -m "docs: update changelog for v${VERSION}" || echo "Нет изменений в CHANGELOG"
           git push origin releases/${VERSION}
-
-      - name: Create git tag
-        env:
-          VERSION: ${{ github.run_number }}
-        run: |
-          git checkout main  # Переключаемся на main для создания тега
-          git tag v${VERSION}
-          git push origin v${VERSION}
-          git checkout releases/${VERSION}  # Возвращаемся в релизную ветку
 
       - name: Create Pull Request to main
         env:
@@ -140,7 +140,7 @@ jobs:
           BODY=$(printf "## Релиз v${VERSION}\n\n**Дата**: %s\n**Автор**: %s\n**Версия**: %s\n**Коммиты**:\n%s\n\n**Docker-образ**: cr.yandex/%s/app:${VERSION}" \
             "$(date -u +'%Y-%m-%d %H:%M:%S UTC')" \
             "${{ github.actor }}" \
-            "${VERSIOfixN}" \
+            "${VERSION}" \
             "${COMMITS}" \
             "${REGISTRY_ID}")
           gh issue create --title "Release v${VERSION}" --body "$BODY" --label "release"
