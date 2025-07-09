@@ -111,14 +111,15 @@ jobs:
           git commit -m "docs: update changelog for v${VERSION}" || echo "Нет изменений в CHANGELOG"
           git push origin releases/${VERSION}
 
-      - name: Merge release branch into main
-        env:
-          VERSION: ${{ github.run_number }}
-        run: |
-          git checkout main
-          git pull origin main
-          git merge releases/${VERSION} --no-ff -m "Merge changelog updates from releases/${VERSION} into main"
-          git push origin main
+      - name: Create Pull Request to main
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: releases/${{ github.run_number }}
+          base: main
+          title: "Release v${{ github.run_number }}"
+          body: "Автоматический PR с changelog и релизом"
+          commit-message: "chore: release v${{ github.run_number }}"
 
       - name: Create GitHub issue for release
         env:
