@@ -27,6 +27,7 @@ jobs:
           host: ${{ secrets.YC_VM_HOST }}
           username: ${{ secrets.YC_VM_USER }}
           key: ${{ secrets.YC_VM_SSH_KEY }}
+          passphrase: ${{ secrets.YC_VM_SSH_PASSPHRASE }}
           script: |
             docker login --username oauth --password ${{ secrets.YC_OAUTH_TOKEN }} cr.yandex
             IMAGE_TAG="${{ github.event.inputs.version }}_latest"
