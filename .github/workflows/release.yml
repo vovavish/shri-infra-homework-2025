@@ -111,6 +111,15 @@ jobs:
           git commit -m "docs: update changelog for v${VERSION}" || echo "Нет изменений в CHANGELOG"
           git push origin releases/${VERSION}
 
+      - name: Merge release branch into main
+        env:
+          VERSION: ${{ github.run_number }}
+        run: |
+          git checkout main
+          git pull origin main
+          git merge releases/${VERSION} --no-ff -m "Merge changelog updates from releases/${VERSION} into main"
+          git push origin main
+
       - name: Create GitHub issue for release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -123,7 +132,7 @@ jobs:
           else
             COMMITS=$(git log $PREVIOUS_TAG..HEAD --pretty=format:"  - %h: %s" --no-merges || echo "  - Нет новых коммитов")
           fi
-          BODY=$(printf "## 📦 Релиз v${VERSION}\n\n**Дата**: %s\n**Автор**: %s\n**Версия**: %s\n**Коммиты**:\n%s\n\n**Docker-образ**: cr.yandex/%s/app:${VERSION}" \
+          BODY=$(printf "## Релиз v${VERSION}\n\n**Дата**: %s\n**Автор**: %s\n**Версия**: %s\n**Коммиты**:\n%s\n\n**Docker-образ**: cr.yandex/%s/app:${VERSION}" \
             "$(date -u +'%Y-%m-%d %H:%M:%S UTC')" \
             "${{ github.actor }}" \
             "${VERSION}" \
