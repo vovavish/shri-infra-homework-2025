@@ -49,13 +49,41 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Create release branch
+      - name: Generate changelog from commits
+        id: changelog
         env:
           VERSION: ${{ github.run_number }}
         run: |
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -z "$PREVIOUS_TAG" ]; then
+            COMMITS=$(git log --pretty=format:"- %h: %s" --no-merges || echo "- Первый релиз")
+          else
+            COMMITS=$(git log $PREVIOUS_TAG..HEAD --pretty=format:"- %h: %s" --no-merges || echo "- Нет новых коммитов")
+          fi
+          echo "COMMITS<<EOF" >> $GITHUB_ENV
+          echo "$COMMITS" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      - name: Create release branch and update CHANGELOG
+        env:
+          VERSION: ${{ github.run_number }}
+          COMMITS: ${{ env.COMMITS }}
+        run: |
           git config --global user.email "github-actions@github.com"
           git config --global user.name "GitHub Actions"
+          # Создаём ветку релиза
           git checkout -b releases/${VERSION}
+          # Обновляем CHANGELOG.md
+          {
+            echo "## v${VERSION} — $(date +'%Y-%m-%d')"
+            echo ""
+            echo "$COMMITS"
+            echo ""
+            cat CHANGELOG.md 2>/dev/null || echo ""
+          } > CHANGELOG.tmp.md
+          mv CHANGELOG.tmp.md CHANGELOG.md
+          git add CHANGELOG.md
+          git commit -m "docs: update changelog for v${VERSION}"
           git push origin releases/${VERSION}
 
       - name: Build Docker image
@@ -79,38 +107,6 @@ jobs:
           git tag v${VERSION}
           git push origin v${VERSION}
 
-      - name: Generate changelog from commits
-        id: changelog
-        env:
-          VERSION: ${{ github.run_number }}
-        run: |
-          PREVIOUS_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-          if [ -z "$PREVIOUS_TAG" ]; then
-            COMMITS=$(git log --pretty=format:"- %h: %s" --no-merges || echo "- Первый релиз")
-          else
-            COMMITS=$(git log $PREVIOUS_TAG..HEAD --pretty=format:"- %h: %s" --no-merges || echo "- Нет новых коммитов")
-          fi
-          echo "COMMITS<<EOF" >> $GITHUB_ENV
-          echo "$COMMITS" >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
-
-      - name: Update CHANGELOG.md
-        env:
-          VERSION: ${{ github.run_number }}
-          COMMITS: ${{ env.COMMITS }}
-        run: |
-          {
-            echo "## v${VERSION} — $(date +'%Y-%m-%d')"
-            echo ""
-            echo "$COMMITS"
-            echo ""
-            cat CHANGELOG.md 2>/dev/null || echo ""
-          } > CHANGELOG.tmp.md
-          mv CHANGELOG.tmp.md CHANGELOG.md
-          git add CHANGELOG.md
-          git commit -m "docs: update changelog for v${VERSION}" || echo "Нет изменений в CHANGELOG"
-          git push origin releases/${VERSION}
-
       - name: Create Pull Request to main
         uses: peter-evans/create-pull-request@v5
         with:
@@ -120,6 +116,8 @@ jobs:
           title: "Release v${{ github.run_number }}"
           body: "Автоматический PR с changelog и релизом"
           commit-message: "chore: release v${{ github.run_number }}"
+          add-paths: |
+            CHANGELOG.md
 
       - name: Create GitHub issue for release
         env:
