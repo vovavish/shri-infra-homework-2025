@@ -4,10 +4,10 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'версия образа'
+        description: "версия образа"
         required: true
 
-job:
+jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:

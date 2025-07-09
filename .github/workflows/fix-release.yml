@@ -3,7 +3,7 @@ name: Fix Release
 on:
   push:
     branches:
-      - 'releases/**'
+      - "releases/**"
 
 jobs:
   fix-release:
@@ -48,4 +48,4 @@ jobs:
 Автор: ${{ github.actor }}
 
 Docker-образ: $REGISTRY:${FIX_VERSION}"
-          gh issue create --title "Fix Release ${FIX_VERSION}" --body "$BODY"
+  gh issue create --title "Fix Release ${FIX_VERSION}" --body "$BODY"
