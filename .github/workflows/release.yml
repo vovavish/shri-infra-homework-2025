@@ -49,6 +49,15 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Create release branch
+        env:
+          VERSION: ${{ github.run_number }}
+        run: |
+          git config --global user.email "github-actions@github.com"
+          git config --global user.name "GitHub Actions"
+          git checkout -b releases/${VERSION}
+          git push origin releases/${VERSION}
+
       - name: Generate changelog from commits
         id: changelog
         env:
@@ -60,18 +69,16 @@ jobs:
           else
             COMMITS=$(git log $PREVIOUS_TAG..HEAD --pretty=format:"- %h: %s" --no-merges || echo "- Нет новых коммитов")
           fi
+          echo "COMMITS=$COMMITS"
           echo "COMMITS<<EOF" >> $GITHUB_ENV
           echo "$COMMITS" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
 
-      - name: Create release branch and update CHANGELOG
+      - name: Update CHANGELOG.md
         env:
           VERSION: ${{ github.run_number }}
           COMMITS: ${{ env.COMMITS }}
         run: |
-          git config --global user.email "github-actions@github.com"
-          git config --global user.name "GitHub Actions"
-          git checkout -b releases/${VERSION}
           {
             echo "## v${VERSION} — $(date +'%Y-%m-%d')"
             echo ""
@@ -80,9 +87,20 @@ jobs:
             cat CHANGELOG.md 2>/dev/null || echo ""
           } > CHANGELOG.tmp.md
           mv CHANGELOG.tmp.md CHANGELOG.md
-          git add CHANGELOG.md
-          git commit -m "docs: update changelog for v${VERSION}" || echo "Нет изменений для коммита"
-          git push origin releases/${VERSION} --force
+          if git diff --quiet CHANGELOG.md; then
+            echo "Нет изменений в CHANGELOG.md"
+          else
+            git add CHANGELOG.md
+            git commit -m "docs: update changelog for v${VERSION}"
+            git push origin releases/${VERSION} --force
+          fi
+          echo "Текущая ветка:"
+          git branch
+          echo "Содержимое CHANGELOG.md:"
+          cat CHANGELOG.md
+          echo "Различия с main:"
+          git fetch origin main
+          git diff origin/main releases/${VERSION}
 
       - name: Create Pull Request to main
         id: cpr
