@@ -123,5 +123,10 @@ jobs:
           else
             COMMITS=$(git log $PREVIOUS_TAG..HEAD --pretty=format:"  - %h: %s" --no-merges || echo "  - Нет новых коммитов")
           fi
-          BODY="## 📦 Релиз v${VERSION}\n\n**Дата**: $(date -u +'%Y-%m-%d %H:%M:%S UTC')\n**Автор**: ${{ github.actor }}\n**Версия**: ${VERSION}\n**Коммиты**:\n${COMMITS}\n\n**Docker-образ**: cr.yandex/${REGISTRY_ID}/app:${VERSION}"
+          BODY=$(printf "## 📦 Релиз v${VERSION}\n\n**Дата**: %s\n**Автор**: %s\n**Версия**: %s\n**Коммиты**:\n%s\n\n**Docker-образ**: cr.yandex/%s/app:${VERSION}" \
+            "$(date -u +'%Y-%m-%d %H:%M:%S UTC')" \
+            "${{ github.actor }}" \
+            "${VERSION}" \
+            "${COMMITS}" \
+            "${REGISTRY_ID}")
           gh issue create --title "Release v${VERSION}" --body "$BODY" --label "release"
