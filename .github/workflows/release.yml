@@ -71,9 +71,7 @@ jobs:
         run: |
           git config --global user.email "github-actions@github.com"
           git config --global user.name "GitHub Actions"
-          # Создаём ветку релиза
           git checkout -b releases/${VERSION}
-          # Обновляем CHANGELOG.md
           {
             echo "## v${VERSION} — $(date +'%Y-%m-%d')"
             echo ""
@@ -83,8 +81,31 @@ jobs:
           } > CHANGELOG.tmp.md
           mv CHANGELOG.tmp.md CHANGELOG.md
           git add CHANGELOG.md
-          git commit -m "docs: update changelog for v${VERSION}"
-          git push origin releases/${VERSION}
+          git commit -m "docs: update changelog for v${VERSION}" || echo "Нет изменений для коммита"
+          git push origin releases/${VERSION} --force
+
+      - name: Create Pull Request to main
+        id: cpr
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: releases/${{ github.run_number }}
+          base: main
+          title: "Release v${{ github.run_number }}"
+          body: |
+            Автоматический PR с changelog для версии v${{ github.run_number }}.
+            Changelog:
+            ${{ env.COMMITS }}
+          commit-message: "chore: release v${{ github.run_number }}"
+          add-paths: |
+            CHANGELOG.md
+
+      - name: Auto-merge Pull Request
+        if: steps.cpr.outputs.pull-request-number
+        run: |
+          gh pr merge ${{ steps.cpr.outputs.pull-request-number }} --auto --merge
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build Docker image
         run: |
@@ -104,20 +125,10 @@ jobs:
         env:
           VERSION: ${{ github.run_number }}
         run: |
+          git checkout main
+          git pull origin main
           git tag v${VERSION}
           git push origin v${VERSION}
-
-      - name: Create Pull Request to main
-        uses: peter-evans/create-pull-request@v5
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          branch: releases/${{ github.run_number }}
-          base: main
-          title: "Release v${{ github.run_number }}"
-          body: "Автоматический PR с changelog и релизом"
-          commit-message: "chore: release v${{ github.run_number }}"
-          add-paths: |
-            CHANGELOG.md
 
       - name: Create GitHub issue for release
         env:
