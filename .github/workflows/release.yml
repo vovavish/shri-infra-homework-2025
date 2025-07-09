@@ -74,15 +74,6 @@ jobs:
           docker push $REGISTRY:${{ github.run_number }}
           docker push $REGISTRY:${{ github.run_number }}_latest
 
-      - name: Create git tag
-        env:
-          VERSION: ${{ github.run_number }}
-        run: |
-          git checkout main  # Переключаемся на main для создания тега
-          git tag v${VERSION}
-          git push origin v${VERSION}
-          git checkout releases/${VERSION}  # Возвращаемся в релизную ветку
-
       - name: Generate changelog from commits
         id: changelog
         env:
@@ -95,7 +86,7 @@ jobs:
             COMMITS=$(git log main --pretty=format:"- %h: %s" --no-merges || echo "- Первый релиз")
           else
             # Берём коммиты из main между последним тегом и последним коммитом
-            COMMITS=$(git log $PREVIOUS_TAG..main --pretty=format:"- %h: %s" --no-merges || echo "- Нет новых коммитов")
+            COMMITS=$(git log $PREVIOUS_TAG..HEAD --pretty=format:"- %h: %s" --no-merges || echo "- Нет новых коммитов")
           fi
           echo "COMMITS<<EOF" >> $GITHUB_ENV
           echo "$COMMITS" >> $GITHUB_ENV
@@ -117,6 +108,15 @@ jobs:
           git add CHANGELOG.md
           git commit -m "docs: update changelog for v${VERSION}" || echo "Нет изменений в CHANGELOG"
           git push origin releases/${VERSION}
+
+      - name: Create git tag
+        env:
+          VERSION: ${{ github.run_number }}
+        run: |
+          git checkout main  # Переключаемся на main для создания тега
+          git tag v${VERSION}
+          git push origin v${VERSION}
+          git checkout releases/${VERSION}  # Возвращаемся в релизную ветку
 
       - name: Create Pull Request to main
         env:
