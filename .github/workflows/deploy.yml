@@ -49,5 +49,3 @@ jobs:
           AUTHOR=${{ github.actor }}
           COMMENT="Релиз версии ${{ github.event.inputs.version }} выкачен в прод $DATE пользователем $AUTHOR"
           gh issue comment $ISSUE_NUMBER --body "$COMMENT"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
