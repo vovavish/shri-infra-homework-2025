@@ -4,15 +4,13 @@ on:
   workflow_dispatch:
 
 jobs:
-  release:
+  lint:
     runs-on: ubuntu-latest
-    env:
-      REGISTRY: cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Set up Node.js
+      - name: Set起来了 Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "24.x"
@@ -23,8 +21,33 @@ jobs:
       - name: Run lint
         run: npm run lint
 
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24.x"
+
+      - name: Install dependencies
+        run: npm ci
+
       - name: Run tests
         run: npm run test
+
+  release:
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    env:
+      REGISTRY: cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Create release branch
         env:
@@ -61,7 +84,12 @@ jobs:
         env:
           VERSION: ${{ github.run_number }}
         run: |
-          COMMITS=$(git log --pretty=format:"- %h: %s" $(git describe --tags --abbrev=0 2>/dev/null || echo "")..HEAD || echo "- первый релиз")
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -z "$PREVIOUS_TAG" ]; then
+            COMMITS=$(git log --pretty=format:"- %h: %s" --no-merges || echo "- Первый релиз")
+          else
+            COMMITS=$(git log $PREVIOUS_TAG..HEAD --pretty=format:"- %h: %s" --no-merges || echo "- Нет новых коммитов")
+          fi
           echo "COMMITS<<EOF" >> $GITHUB_ENV
           echo "$COMMITS" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
@@ -76,22 +104,27 @@ jobs:
             echo ""
             echo "$COMMITS"
             echo ""
-            cat CHANGELOG.md
+            cat CHANGELOG.md 2>/dev/null || echo ""
           } > CHANGELOG.tmp.md
           mv CHANGELOG.tmp.md CHANGELOG.md
           git add CHANGELOG.md
-          git commit -m "docs: update changelog for v${VERSION}"
+          git commit -m "docs: update changelog for v${VERSION}" || echo "Нет изменений в CHANGELOG"
           git push origin releases/${VERSION}
 
-      - name: Create GitHub issue for release
+      - name: Create GitHub issue for deploy
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ github.run_number }}
           REGISTRY_ID: ${{ secrets.YC_REGISTRY_ID }}
         run: |
-          COMMITS=$(git log $(git describe --tags --abbrev=0 2>/dev/null || echo "")..HEAD --oneline)
-          BODY="## 📦 Релиз v${VERSION}\n\nДата: $(date -u)\nАвтор: ${{ github.actor }}\nВерсия: ${VERSION}\nКоммиты:\n  ${COMMITS}\n\nDocker-образ: cr.yandex/${REGISTRY_ID}/app:${VERSION}"
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -z "$PREVIOUS_TAG" ]; then
+            COMMITS=$(git log --pretty=format:"  - %h: %s" --no-merges || echo "  - Первый релиз")
+          else
+            COMMITS=$(git log $PREVIOUS_TAG..HEAD --pretty=format:"  - %h: %s" --no-merges || echo "  - Нет новых коммитов")
+          fi
+          BODY="## 📦 Деплой v${VERSION}\n\n**Дата**: $(date -u +'%Y-%m-%d %H:%M:%S UTC')\n**Автор**: ${{ github.actor }}\n**Версия**: ${VERSION}\n**Коммиты**:\n${COMMITS}\n\n**Docker-образ**: cr.yandex/${REGISTRY_ID}/app:${VERSION}_latest"
           curl -s -X POST https://api.github.com/repos/${{ github.repository }}/issues \
             -H "Authorization: token ${GITHUB_TOKEN}" \
             -H "Accept: application/vnd.github.v3+json" \
-            -d "$(jq -n --arg title "Release v${VERSION}" --arg body "$BODY" '{title: $title, body: $body}')"
+            -d "$(jq -n --arg title "Release v${VERSION}" --arg body "$BODY" --arg label "deploy" '{title: $title, body: $body, labels: [$label]}')"
