@@ -55,6 +55,8 @@ jobs:
         run: |
           git config --global user.email "github-actions@github.com"
           git config --global user.name "GitHub Actions"
+          git checkout main
+          git pull origin main  # Убедимся, что main актуален
           git checkout -b releases/${VERSION}
           git push origin releases/${VERSION}
 
@@ -76,19 +78,24 @@ jobs:
         env:
           VERSION: ${{ github.run_number }}
         run: |
+          git checkout main  # Переключаемся на main для создания тега
           git tag v${VERSION}
           git push origin v${VERSION}
+          git checkout releases/${VERSION}  # Возвращаемся в релизную ветку
 
       - name: Generate changelog from commits
         id: changelog
         env:
           VERSION: ${{ github.run_number }}
         run: |
-          PREVIOUS_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          # Находим последний тег (релизный или фиксрелизный)
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 --match "v*" 2>/dev/null || echo "")
           if [ -z "$PREVIOUS_TAG" ]; then
-            COMMITS=$(git log --pretty=format:"- %h: %s" --no-merges || echo "- Первый релиз")
+            # Если тегов нет, берём все коммиты из main
+            COMMITS=$(git log main --pretty=format:"- %h: %s" --no-merges || echo "- Первый релиз")
           else
-            COMMITS=$(git log $PREVIOUS_TAG..HEAD --pretty=format:"- %h: %s" --no-merges || echo "- Нет новых коммитов")
+            # Берём коммиты из main между последним тегом и последним коммитом
+            COMMITS=$(git log $PREVIOUS_TAG..main --pretty=format:"- %h: %s" --no-merges || echo "- Нет новых коммитов")
           fi
           echo "COMMITS<<EOF" >> $GITHUB_ENV
           echo "$COMMITS" >> $GITHUB_ENV
@@ -102,7 +109,7 @@ jobs:
           {
             echo "## v${VERSION} — $(date +'%Y-%m-%d')"
             echo ""
-            echo "$COMMITS"
+            echo "${COMMITS}"
             echo ""
             cat CHANGELOG.md 2>/dev/null || echo ""
           } > CHANGELOG.tmp.md
@@ -128,17 +135,12 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ github.run_number }}
           REGISTRY_ID: ${{ secrets.YC_REGISTRY_ID }}
+          COMMITS: ${{ env.COMMITS }}
         run: |
-          PREVIOUS_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-          if [ -z "$PREVIOUS_TAG" ]; then
-            COMMITS=$(git log --pretty=format:"  - %h: %s" --no-merges || echo "  - Первый релиз")
-          else
-            COMMITS=$(git log $PREVIOUS_TAG..HEAD --pretty=format:"  - %h: %s" --no-merges || echo "  - Нет новых коммитов")
-          fi
           BODY=$(printf "## Релиз v${VERSION}\n\n**Дата**: %s\n**Автор**: %s\n**Версия**: %s\n**Коммиты**:\n%s\n\n**Docker-образ**: cr.yandex/%s/app:${VERSION}" \
             "$(date -u +'%Y-%m-%d %H:%M:%S UTC')" \
             "${{ github.actor }}" \
-            "${VERSION}" \
+            "${VERSIOfixN}" \
             "${COMMITS}" \
             "${REGISTRY_ID}")
           gh issue create --title "Release v${VERSION}" --body "$BODY" --label "release"
