@@ -1,0 +1,51 @@
+name: Fix Release
+
+on:
+  push:
+    branches:
+      - 'releases/**'
+
+jobs:
+  fix-release:
+    runs-on: ubuntu-latest
+    env:
+      REGISTRY: cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Get fix version
+        id: version
+        run: |
+          VERSION=${GITHUB_REF#refs/heads/releases/}
+          DATE=$(date +%s)
+          FIX_VERSION="v${VERSION}-fix-${DATE}"
+          echo "FIX_VERSION=${FIX_VERSION}" >> $GITHUB_ENV
+          echo "FIX_VERSION=$FIX_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Build Docker image
+        run: |
+          docker build -t $REGISTRY:${FIX_VERSION} .
+          docker tag $REGISTRY:${FIX_VERSION} $REGISTRY:${FIX_VERSION}_latest
+
+      - name: Login to Yandex Container Registry
+        run: echo ${{ secrets.YC_OAUTH_TOKEN }} | docker login -u oauth --password-stdin cr.yandex
+
+      - name: Push Docker image
+        run: |
+          docker push $REGISTRY:${FIX_VERSION}
+          docker push $REGISTRY:${FIX_VERSION}_latest
+
+      - name: Create GitHub issue for fix-release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BODY="🐞 Fix релиз: **${FIX_VERSION}**
+
+Дата: $(date -u)
+Ветка: ${GITHUB_REF_NAME}
+Автор: ${{ github.actor }}
+
+Docker-образ: $REGISTRY:${FIX_VERSION}"
+          gh issue create --title "Fix Release ${FIX_VERSION}" --body "$BODY"

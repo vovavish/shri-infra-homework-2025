@@ -1,0 +1,88 @@
+name: Release
+
+on:
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      REGISTRY: cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app
+    steps:
+      - uses: actions/checkout@v3
+        name: Use Node.js
+        with:
+          node-version: 24.x
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run test
+      
+      - name: Create release branch
+        run: |
+          git config --global user.email "github-actions@github.com"
+          git config --global user.name "GitHub Actions"
+          git checkout -b releases/${VERSION}
+          git push origin releases/${VERSION}
+
+      - name: Build docker image
+        run: |
+          docker build -t $REGISTRY:${{ github.run_number }} .
+          docker tag $REGISTRY:${{ github.run_number }} $REGISTRY:${{ github.run_number }}_latest
+
+      - name: Login to yandex container registry
+        run: |
+          docker login -u oauth -p ${{ secrets.YC_OAUTH_TOKEN }} cr.yandex
+
+      - name: Push docker image
+        run: |
+          docker push $REGISTRY:${{ github.run_number }}
+          docker push $REGISTRY:${{ github.run_number }}_latest
+      
+      - name: Create git tag
+        run: |
+          git tag v${VERSION}
+          git push origin v${VERSION}
+
+      - name: Generate changelog from commits
+        id: changelog
+        run: |
+          COMMITS=$(git log --pretty=format:"- %h: %s" $(git describe --tags --abbrev=0)..HEAD || echo "- первый релиз")
+          echo "COMMITS<<EOF" >> $GITHUB_ENV
+          echo "$COMMITS" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+      - name: Update CHANGELOG.md
+        run: |
+          {
+            echo "## v${VERSION} — $(date +'%Y-%m-%d')"
+            echo ""
+            echo "$COMMITS"
+            echo ""
+            cat CHANGELOG.md
+          } > CHANGELOG.tmp.md
+          mv CHANGELOG.tmp.md CHANGELOG.md
+          git add CHANGELOG.md
+          git commit -m "docs: update changelog for v${VERSION}"
+          git push origin releases/${VERSION}
+          
+      - name: Create github issue for release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ github.run_number }}
+          REGISTRY_ID: ${{ secrets.YC_REGISTRY_ID }}
+        run: |
+          COMMITS=$(git log $(git describe --tags --abbrev=0 || echo "")..HEAD --oneline)
+          BODY="## 📦 Релиз v${VERSION}
+
+Дата: $(date -u)
+Автор: ${{ github.actor }}
+Версия: ${VERSION}
+Коммиты:
+${COMMITS}
+
+Docker-образ: cr.yandex/${REGISTRY_ID}/app:${VERSION}"
+
+          curl -s -X POST https://api.github.com/repos/${{ github.repository }}/issues \
+            -H "Authorization: token ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            -d "$(jq -n --arg title "Release v${VERSION}" --arg body "$BODY" '{title: $title, body: $body}')"
