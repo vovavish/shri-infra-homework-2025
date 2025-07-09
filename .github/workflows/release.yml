@@ -111,6 +111,18 @@ jobs:
           git commit -m "docs: update changelog for v${VERSION}" || echo "Нет изменений в CHANGELOG"
           git push origin releases/${VERSION}
 
+      - name: Create Pull Request to main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ github.run_number }}
+        run: |
+          gh pr create \
+            --base main \
+            --head releases/${VERSION} \
+            --title "Release v${VERSION} - Update CHANGELOG" \
+            --body "This PR updates CHANGELOG.md for release v${VERSION}." \
+            --label "release"
+
       - name: Create GitHub issue for release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
