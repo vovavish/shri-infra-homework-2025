@@ -3,10 +3,6 @@ name: Release
 on:
   workflow_dispatch:
 
-permissions:
-  contents: write
-  pull-requests: write
-
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -114,19 +110,6 @@ jobs:
           git add CHANGELOG.md
           git commit -m "docs: update changelog for v${VERSION}" || echo "Нет изменений в CHANGELOG"
           git push origin releases/${VERSION}
-
-      - name: Create Pull Request to main
-        uses: peter-evans/create-pull-request@v7
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "docs: update changelog for v${{ github.run_number }}"
-          title: "Release v${{ github.run_number }}"
-          body: "Автоматически созданный pull request для вливания релизной ветки `releases/${{ github.run_number }}` в `main`."
-          base: main
-          branch: releases/${{ github.run_number }}
-          delete-branch: false
-          labels: release
-          draft: false
 
       - name: Create GitHub issue for release
         env:
