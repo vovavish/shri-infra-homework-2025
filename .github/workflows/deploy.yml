@@ -44,7 +44,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          ISSUE_NUMBER=$(gh issue list --state open --json number,title | jq -r '.[] | select(.title | contains("Release ${{ github.event.inputs.version }}")) | .number')
+          ISSUE_NUMBER=$(gh issue list --state open --json number,title | jq -r '.[] | select(.title | contains("Release v${{ github.event.inputs.version }}")) | .number')
           if [ -z "$ISSUE_NUMBER" ]; then
             echo "Issue для версии ${{ github.event.inputs.version }} не найдено"
             exit 1
