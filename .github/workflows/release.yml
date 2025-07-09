@@ -10,7 +10,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "24.x"
@@ -111,7 +111,24 @@ jobs:
           git commit -m "docs: update changelog for v${VERSION}" || echo "Нет изменений в CHANGELOG"
           git push origin releases/${VERSION}
 
-      - name: Create GitHub issue for deploy
+      - name: Create GitHub release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ github.run_number }}
+        run: |
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -z "$PREVIOUS_TAG" ]; then
+            COMMITS=$(git log --pretty=format:"  - %h: %s" --no-merges || echo "  - Первый релиз")
+          else
+            COMMITS=$(git log $PREVIOUS_TAG..HEAD --pretty=format:"  - %h: %s" --no-merges || echo "  - Нет новых коммитов")
+          fi
+          BODY="## 📦 Релиз v${VERSION}\n\n**Дата**: $(date -u +'%Y-%m-%d %H:%M:%S UTC')\n**Автор**: ${{ github.actor }}\n**Версия**: ${VERSION}\n**Коммиты**:\n${COMMITS}\n\n**Docker-образ**: cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${VERSION}_latest"
+          gh release create v${VERSION} \
+            --title "Release v${VERSION}" \
+            --notes "$BODY" \
+            --target releases/${VERSION}
+
+      - name: Create GitHub issue for release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ github.run_number }}
@@ -123,8 +140,8 @@ jobs:
           else
             COMMITS=$(git log $PREVIOUS_TAG..HEAD --pretty=format:"  - %h: %s" --no-merges || echo "  - Нет новых коммитов")
           fi
-          BODY="## 📦 Деплой v${VERSION}\n\n**Дата**: $(date -u +'%Y-%m-%d %H:%M:%S UTC')\n**Автор**: ${{ github.actor }}\n**Версия**: ${VERSION}\n**Коммиты**:\n${COMMITS}\n\n**Docker-образ**: cr.yandex/${REGISTRY_ID}/app:${VERSION}_latest"
+          BODY="## 📦 Релиз v${VERSION}\n\n**Дата**: $(date -u +'%Y-%m-%d %H:%M:%S UTC')\n**Автор**: ${{ github.actor }}\n**Версия**: ${VERSION}\n**Коммиты**:\n${COMMITS}\n\n**Docker-образ**: cr.yandex/${REGISTRY_ID}/app:${VERSION}_latest"
           curl -s -X POST https://api.github.com/repos/${{ github.repository }}/issues \
             -H "Authorization: token ${GITHUB_TOKEN}" \
             -H "Accept: application/vnd.github.v3+json" \
-            -d "$(jq -n --arg title "Release v${VERSION}" --arg body "$BODY" --arg label "deploy" '{title: $title, body: $body, labels: [$label]}')"
+            -d "$(jq -n --arg title "Release v${VERSION}" --arg body "$BODY" --arg label "release" '{title: $title, body: $body, labels: [$label]}')"
