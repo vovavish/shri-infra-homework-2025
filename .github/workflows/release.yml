@@ -120,7 +120,7 @@ jobs:
 
       - name: Create Pull Request to main
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
           VERSION: ${{ github.run_number }}
         run: |
           gh pr create \
