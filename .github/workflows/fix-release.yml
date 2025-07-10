@@ -50,13 +50,6 @@ jobs:
       VERSION: ${{ github.event.inputs.release_version }}
       FIX: fix${{ github.run_number }}
     steps:
-      - name: Check if release branch exists
-        run: |
-          if ! git ls-remote --exit-code --heads origin releases/${{ github.event.inputs.release_version }}; then
-            echo "Branch releases/${{ github.event.inputs.release_version }} does not exist"
-            exit 1
-          fi
-
       - name: Checkout release branch
         uses: actions/checkout@v4
         with:
