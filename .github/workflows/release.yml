@@ -95,7 +95,7 @@ jobs:
           if [ -z "${{ steps.get_previous_tag.outputs.previous_tag }}" ]; then
             COMMITS=$(git log main --pretty=format:"- %h: %s" --no-merges || echo "- Первый релиз")
           else
-            COMMITS=$(git log ${{ steps.get_previous_tag.outputs.previous_tag }}..v${VERSION} --pretty=format:"- %h: %s" --no-merges | grep -v "docs: update changelog for v || echo "- Нет новых коммитов")
+            COMMITS=$(git log ${{ steps.get_previous_tag.outputs.previous_tag }}..v${VERSION} --pretty=format:"- %h: %s" --no-merges | grep -v "docs: update changelog for v" || echo "- Нет новых коммитов")
           fi
           echo "COMMITS<<EOF" >> $GITHUB_ENV
           echo "$COMMITS" >> $GITHUB_ENV
