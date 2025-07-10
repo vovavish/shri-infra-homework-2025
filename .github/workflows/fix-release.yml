@@ -56,6 +56,14 @@ jobs:
           ref: releases/${{ github.event.inputs.release_version }}
           fetch-depth: 0
 
+      - name: Merge main into release branch
+        run: |
+          git config --global user.email "github-actions@github.com"
+          git config --global user.name "GitHub Actions"
+          git fetch origin
+          git merge origin/main --no-edit || echo "Конфликты при мержа, разрешите их вручную"
+          git push origin releases/${VERSION}
+
       - name: Build Docker image
         run: |
           docker build -t $REGISTRY:${VERSION}_${FIX} .
@@ -87,13 +95,40 @@ jobs:
         id: changelog
         run: |
           if [ -z "${{ steps.get_previous_tag.outputs.previous_tag }}" ]; then
-            COMMITS="- Нет предыдущего тега"
+            COMMITS=$(git log origin/main --pretty=format:"- %h: %s" --no-merges | grep -v "docs: update changelog for v" || echo "- Первый фикс для релиза ${VERSION}")
           else
-            COMMITS=$(git log ${{ steps.get_previous_tag.outputs.previous_tag }}..HEAD --pretty=format:"- %h: %s" --no-merges)
+            COMMITS=$(git log ${{ steps.get_previous_tag.outputs.previous_tag }}..HEAD --pretty=format:"- %h: %s" --no-merges | grep -v "docs: update changelog for v" || echo "- Нет новых коммитов")
           fi
           echo "COMMITS<<EOF" >> $GITHUB_ENV
           echo "$COMMITS" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
+
+      - name: Update CHANGELOG.md
+        env:
+          COMMITS: ${{ env.COMMITS }}
+        run: |
+          {
+            echo "## ${VERSION}_${FIX} — $(date +'%Y-%m-%d')"
+            echo ""
+            echo "${COMMITS}"
+            echo ""
+            cat CHANGELOG.md 2>/dev/null || echo ""
+          } > CHANGELOG.tmp.md
+          mv CHANGELOG.tmp.md CHANGELOG.md
+          git add CHANGELOG.md
+          git commit -m "docs: update changelog for ${VERSION}_${FIX}" || echo "Нет изменений в CHANGELOG"
+          git push origin releases/${VERSION}
+
+      - name: Create Pull Request to main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr create \
+            --base main \
+            --head releases/${VERSION} \
+            --title "Fix ${VERSION}_${FIX} - Update CHANGELOG" \
+            --body "This PR updates CHANGELOG.md for fix ${VERSION}_${FIX}." \
+            --label "fix-release"
 
       - name: Add comment to release issue
         env:
