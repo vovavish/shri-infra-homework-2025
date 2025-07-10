@@ -48,7 +48,6 @@ jobs:
     env:
       REGISTRY: cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app
       VERSION: ${{ github.event.inputs.release_version }}
-      FIX: fix${{ github.run_number }}
     steps:
       - name: Checkout release branch
         uses: actions/checkout@v4
@@ -56,18 +55,25 @@ jobs:
           ref: releases/${{ github.event.inputs.release_version }}
           fetch-depth: 0
 
+      - name: Calculate fix number
+        id: calculate_fix
+        run: |
+          FIX_NUMBER=$(git tag --list "v${{ env.VERSION }}_fix*" | wc -l | xargs -I {} expr {} + 1)
+          echo "FIX=fix${FIX_NUMBER}" >> $GITHUB_ENV
+          echo "fix_number=${FIX_NUMBER}" >> $GITHUB_OUTPUT
+
       - name: Merge main into release branch
         run: |
           git config --global user.email "github-actions@github.com"
           git config --global user.name "GitHub Actions"
           git fetch origin
           git merge origin/main --no-edit || echo "Конфликты при мержа, разрешите их вручную"
-          git push origin releases/${VERSION}
+          git push origin releases/${{ env.VERSION }}
 
       - name: Build Docker image
         run: |
-          docker build -t $REGISTRY:${VERSION}_${FIX} .
-          docker tag $REGISTRY:${VERSION}_${FIX} $REGISTRY:${VERSION}_latest
+          docker build -t ${{ env.REGISTRY }}:${{ env.VERSION }}_${{ env.FIX }} .
+          docker tag ${{ env.REGISTRY }}:${{ env.VERSION }}_${{ env.FIX }} ${{ env.REGISTRY }}:${{ env.VERSION }}_latest
 
       - name: Login to Yandex Container Registry
         run: |
@@ -75,20 +81,20 @@ jobs:
 
       - name: Push Docker image
         run: |
-          docker push $REGISTRY:${VERSION}_${FIX}
-          docker push $REGISTRY:${VERSION}_latest
+          docker push ${{ env.REGISTRY }}:${{ env.VERSION }}_${{ env.FIX }}
+          docker push ${{ env.REGISTRY }}:${{ env.VERSION }}_latest
 
       - name: Create git tag
         run: |
           git config --global user.email "github-actions@github.com"
           git config --global user.name "GitHub Actions"
-          git tag v${VERSION}_${FIX}
-          git push origin v${VERSION}_${FIX}
+          git tag v${{ env.VERSION }}_${{ env.FIX }}
+          git push origin v${{ env.VERSION }}_${{ env.FIX }}
 
       - name: Get previous tag
         id: get_previous_tag
         run: |
-          PREV_TAG=$(git describe --tags --abbrev=0 --match "v${VERSION}*" --exclude "v${VERSION}_${FIX}" 2>/dev/null || echo "v${VERSION}")
+          PREV_TAG=$(git describe --tags --abbrev=0 --match "v${{ env.VERSION }}*" --exclude "v${{ env.VERSION }}_${{ env.FIX }}" 2>/dev/null || echo "v${{ env.VERSION }}")
           echo "previous_tag=${PREV_TAG}" >> $GITHUB_OUTPUT
 
       - name: Generate fix changelog
@@ -104,16 +110,16 @@ jobs:
           COMMITS: ${{ env.COMMITS }}
         run: |
           {
-            echo "## ${VERSION}_${FIX} — $(date +'%Y-%m-%d')"
+            echo "## ${{ env.VERSION }}_${{ env.FIX }} — $(date +'%Y-%m-%d')"
             echo ""
-            echo "${COMMITS}"
+            echo "${{ env.COMMITS }}"
             echo ""
             cat CHANGELOG.md 2>/dev/null || echo ""
           } > CHANGELOG.tmp.md
           mv CHANGELOG.tmp.md CHANGELOG.md
           git add CHANGELOG.md
-          git commit -m "docs: update changelog for ${VERSION}_${FIX}" || echo "Нет изменений в CHANGELOG"
-          git push origin releases/${VERSION}
+          git commit -m "docs: update changelog for ${{ env.VERSION }}_${{ env.FIX }}" || echo "Нет изменений в CHANGELOG"
+          git push origin releases/${{ env.VERSION }}
 
       - name: Create Pull Request to main
         env:
@@ -121,9 +127,9 @@ jobs:
         run: |
           gh pr create \
             --base main \
-            --head releases/${VERSION} \
-            --title "Fix ${VERSION}_${FIX} - Update CHANGELOG" \
-            --body "This PR updates CHANGELOG.md for fix ${VERSION}_${FIX}." \
+            --head releases/${{ env.VERSION }} \
+            --title "Fix ${{ env.VERSION }}_${{ env.FIX }} - Update CHANGELOG" \
+            --body "This PR updates CHANGELOG.md for fix ${{ env.VERSION }}_${{ env.FIX }}." \
             --label "fix-release"
 
       - name: Add comment to release issue
@@ -132,17 +138,17 @@ jobs:
           COMMITS: ${{ env.COMMITS }}
           REGISTRY_ID: ${{ secrets.YC_REGISTRY_ID }}
         run: |
-          ISSUE_NUMBER=$(gh issue list --label release --search "${VERSION}" --json number --jq '.[0].number')
+          ISSUE_NUMBER=$(gh issue list --label release --search "${{ env.VERSION }}" --json number --jq '.[0].number')
           if [ -z "$ISSUE_NUMBER" ]; then
-            echo "Issue для релиза v${VERSION} не найдено"
+            echo "Issue для релиза v${{ env.VERSION }} не найдено"
             exit 1
           fi
           BODY=$(printf "### Фикс %s\n\n**Дата**: %s\n**Автор**: %s\n**Коммиты**:\n%s\n\n**Docker-образ**: cr.yandex/%s/app:%s_%s" \
-            "${FIX}" \
+            "${{ env.FIX }}" \
             "$(date -u +'%Y-%m-%d %H:%M:%S UTC')" \
             "${{ github.actor }}" \
-            "${COMMITS}" \
-            "${REGISTRY_ID}" \
-            "${VERSION}" \
-            "${FIX}")
+            "${{ env.COMMITS }}" \
+            "${{ env.REGISTRY_ID }}" \
+            "${{ env.VERSION }}" \
+            "${{ env.FIX }}")
           gh issue comment "$ISSUE_NUMBER" --body "$BODY"
