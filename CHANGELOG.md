@@ -1,3 +1,9 @@
+## v27 — 2025-07-15
+
+- 3cf85ec: test commit
+- 0eb9d07: Update README.md
+- 1958890: Update README.md
+
 ## 26_fix1 — 2025-07-10
 
 - c75be0b: тест фикс 26 версии 3
