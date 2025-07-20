@@ -30,6 +30,7 @@ export const Application: FC = () => {
         <div className={bem()}>
             <Helmet titleTemplate='%s — Kogtetochka store' />
             <nav className='navbar navbar-expand-sm navbar-light bg-light'>
+
                 <div className='container'>
                     <Link className={bem('Brand', ['navbar-brand'])} to='/'>
                         Kogtetochka store
